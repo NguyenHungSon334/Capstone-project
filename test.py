@@ -31,7 +31,7 @@ if torch.cuda.is_available():
 # Video directory and default videos
 VIDEO_DIR = "videos"
 DEFAULT_VIDEOS = [os.path.join(VIDEO_DIR, "root", "video1.mp4"), os.path.join(VIDEO_DIR, "root", "video2.mp4")]
-MODEL_DIR = "rife/train_log"
+MODEL_DIR = "rife_1/train_log"
 TARGET_FPS = 30  # Can be changed to 60 to match first code
 
 class VideoPlayer:
@@ -42,11 +42,12 @@ class VideoPlayer:
         self.playing_response = False
         self.stop_all = False
         self.transitioning = False
-        self.exp = 4  # Interpolation factor for RIFE (17 frames per transition)
+        # self.exp = 4  # Interpolation factor for RIFE (17 frames per transition)
+        self.exp = 2  # Use this for weaker GPU memory (3 frames per transition)
 
         # Load RIFE model
     
-        from rife.train_log.RIFE_HDv3 import Model
+        from rife_1.train_log.RIFE_HDv3 import Model
         self.model = Model()
         self.model.load_model(MODEL_DIR, -1)
         print("Loaded v3.x HD model.")

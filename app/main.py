@@ -23,8 +23,8 @@ warnings.filterwarnings("ignore")
 
 # Hardcoded input parameters
 root_video_paths = [
-    r"D:\Python\Memory\WebMemory\videos\root\video1.mp4",
-    r"D:\Python\Memory\WebMemory\videos\root\video2.mp4"
+    r"D:\Capstone-project\videos\root\video1.mp4",
+    r"D:\Capstone-project\videos\root\video2.mp4"
 ]
 frames = 10
 target_height = 720
