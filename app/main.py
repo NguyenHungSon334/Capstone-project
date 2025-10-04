@@ -11,6 +11,7 @@ import librosa
 import simpleaudio as sa
 import time
 import sys
+import speech_recognition as sr  # Added for speech-to-text
 
 # Thêm đường dẫn cha của rife_1 vào sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -73,12 +74,38 @@ current_folder_video = None
 folder_transition_tensors = None
 folder_transition_dims = None
 folder_transition_audio = None
-input_mode = False
-folder_name = ""
 transition_queue = queue.Queue()
+folder_queue = queue.Queue()  # Queue for folder names from speech
 current_frame = None
 transition_start_frame = None
 waiting_for_transition = False
+
+# Initialize speech recognizer
+recognizer = sr.Recognizer()
+recognizer.pause_threshold = 0.5 
+
+# Define callback for background listening
+def speech_callback(recognizer, audio):
+    print("🔴 Processing audio... (detected speech)")
+    try:
+        # Thay đổi ngôn ngữ thành tiếng Việt
+        folder_name = recognizer.recognize_google(audio, language='vi-VN')
+        print(f"✅ Recognized (Vietnamese): {folder_name}")
+        folder_queue.put(folder_name)
+    except sr.UnknownValueError:
+        print("❌ Could not understand audio")
+    except sr.RequestError as e:
+        print(f"❌ Could not request results; {e}")
+
+# Set up background listening
+print("🎤 Starting continuous microphone listening...")
+print("💬 Now listening for Vietnamese speech...")
+mic = sr.Microphone()
+with mic as source:
+    recognizer.adjust_for_ambient_noise(source, duration=1)
+    print("✅ Microphone calibrated for ambient noise")
+stop_listening = recognizer.listen_in_background(mic, speech_callback)
+print("🎤 Background listening started - speak Vietnamese anytime!")
 
 while True:
     if current_mode == "root":
@@ -87,9 +114,9 @@ while True:
             audio_queue.get()
         
         cap = cv2.VideoCapture(root_video_paths[0])
-        try:
-            audio_data, sr = librosa.load(root_video_paths[0], sr=sample_rate)
-            threading.Thread(target=play_audio, args=(audio_data, sr), daemon=True).start()
+        try:    
+            audio_data, audio_sr = librosa.load(root_video_paths[0], sr=sample_rate)
+            threading.Thread(target=play_audio, args=(audio_data, audio_sr), daemon=True).start()
         except Exception as e:
             print(f"Error loading audio for {root_video_paths[0]}: {str(e)}")
         start_time = time.time()
@@ -99,51 +126,51 @@ while True:
                 break
             current_frame = frame
             display_frame = frame.copy()
-            cv2.putText(display_frame, "Press 'f' to enter folder name", (10, 30), 
+            cv2.putText(display_frame, "Nói tên thư mục", (10, 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            if input_mode:
-                cv2.putText(display_frame, f"Folder: {folder_name}", (10, 60), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             if waiting_for_transition and transition_start_frame is not None:
                 display_frame = transition_start_frame.copy()
-                cv2.putText(display_frame, "Preparing transition...", (10, 90), 
+                cv2.putText(display_frame, "Đang chuẩn bị chuyển cảnh...", (10, 90), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             cv2.imshow("Video Loop", display_frame)
             key = cv2.waitKey(int(video_frame_delay)) & 0xFF
             if key == 27:
-                if input_mode:
-                    input_mode = False
-                    folder_name = ""
-                elif waiting_for_transition:
+                if waiting_for_transition:
                     waiting_for_transition = False
                     transition_start_frame = None
                     transition_queue.queue.clear()
                 else:
                     cap.release()
                     sa.stop_all()
+                    stop_listening(wait_for_stop=False)
+                    print("🛑 Stopping all audio and exiting...")
                     cv2.destroyAllWindows()
                     exit()
-            elif key == ord('f') and not input_mode and not waiting_for_transition:
-                input_mode = True
-                folder_name = ""
-            elif input_mode and key >= 32 and key <= 126:
-                folder_name += chr(key)
-            elif input_mode and key == 13 and current_frame is not None:
-                input_mode = False
-                if folder_name:
+            # Check for spoken folder name
+            if not folder_queue.empty() and not waiting_for_transition:
+                print("📁 Processing folder command...")
+                folder_name = folder_queue.get()
+                if folder_name and current_frame is not None:
+                    print(f"🔍 Looking for folder: '{folder_name}'")
                     current_folder_video = get_video_from_folder(folder_name)
                     if current_folder_video:
+                        print(f"🎬 Found video: {current_folder_video}")
                         sa.stop_all()
                         transition_start_frame = current_frame.copy()
                         waiting_for_transition = True
                         threading.Thread(target=generate_folder_transitions, 
                                         args=(current_folder_video, transition_start_frame, video1_frames[0], frames, transition_queue, target_height, original_height, original_width, transition_frame_delay), 
                                         daemon=True).start()
-                folder_name = ""
+                        print("⏳ Generating transition frames...")
+                    else:
+                        print(f"❌ Folder '{folder_name}' not found!")
+                else:
+                    print("⚠️ Invalid folder name or no current frame")
             if waiting_for_transition and not transition_queue.empty():
+                print("🔄 Transition ready, switching modes...")
                 folder_first_tensor, folder_last_tensor, h, w, folder_audio_first, folder_audio_last, error = transition_queue.get()
                 if error:
-                    print(error)
+                    print(f"❌ Transition error: {error}")
                     current_folder_video = None
                     waiting_for_transition = False
                     transition_start_frame = None
@@ -154,6 +181,7 @@ while True:
                     current_mode = "folder"
                     waiting_for_transition = False
                     transition_start_frame = None
+                    print("✅ Successfully switched to folder mode")
                 break
             if current_mode != "root":
                 break
@@ -162,6 +190,7 @@ while True:
         if current_mode != "root":
             continue
 
+        print("🔄 Transitioning between root videos (1 -> 2)...")
         interpolate_frames(video1_last_tensor, video2_first_tensor, frames, original_height, original_width, transition_frame_delay, h1, w1, video1_audio_last, video2_audio_first)
 
         sa.stop_all()
@@ -170,8 +199,8 @@ while True:
         
         cap = cv2.VideoCapture(root_video_paths[1])
         try:
-            audio_data, sr = librosa.load(root_video_paths[1], sr=sample_rate)
-            threading.Thread(target=play_audio, args=(audio_data, sr), daemon=True).start()
+            audio_data, audio_sr = librosa.load(root_video_paths[1], sr=sample_rate)
+            threading.Thread(target=play_audio, args=(audio_data, audio_sr), daemon=True).start()
         except Exception as e:
             print(f"Error loading audio for {root_video_paths[1]}: {str(e)}")
         start_time = time.time()
@@ -181,51 +210,51 @@ while True:
                 break
             current_frame = frame
             display_frame = frame.copy()
-            cv2.putText(display_frame, "Press 'f' to enter folder name", (10, 30), 
+            cv2.putText(display_frame, "Nói tên thư mục", (10, 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            if input_mode:
-                cv2.putText(display_frame, f"Folder: {folder_name}", (10, 60), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             if waiting_for_transition and transition_start_frame is not None:
                 display_frame = transition_start_frame.copy()
-                cv2.putText(display_frame, "Preparing transition...", (10, 90), 
+                cv2.putText(display_frame, "Đang chuẩn bị chuyển cảnh...", (10, 90), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             cv2.imshow("Video Loop", display_frame)
             key = cv2.waitKey(int(video_frame_delay)) & 0xFF
             if key == 27:
-                if input_mode:
-                    input_mode = False
-                    folder_name = ""
-                elif waiting_for_transition:
+                if waiting_for_transition:
                     waiting_for_transition = False
                     transition_start_frame = None
                     transition_queue.queue.clear()
                 else:
                     cap.release()
                     sa.stop_all()
+                    stop_listening(wait_for_stop=False)
+                    print("🛑 Stopping all audio and exiting...")
                     cv2.destroyAllWindows()
                     exit()
-            elif key == ord('f') and not input_mode and not waiting_for_transition:
-                input_mode = True
-                folder_name = ""
-            elif input_mode and key >= 32 and key <= 126:
-                folder_name += chr(key)
-            elif input_mode and key == 13 and current_frame is not None:
-                input_mode = False
-                if folder_name:
+            # Check for spoken folder name
+            if not folder_queue.empty() and not waiting_for_transition:
+                print("📁 Processing folder command...")
+                folder_name = folder_queue.get()
+                if folder_name and current_frame is not None:
+                    print(f"🔍 Looking for folder: '{folder_name}'")
                     current_folder_video = get_video_from_folder(folder_name)
                     if current_folder_video:
+                        print(f"🎬 Found video: {current_folder_video}")
                         sa.stop_all()
                         transition_start_frame = current_frame.copy()
                         waiting_for_transition = True
                         threading.Thread(target=generate_folder_transitions, 
                                         args=(current_folder_video, transition_start_frame, video1_frames[0], frames, transition_queue, target_height, original_height, original_width, transition_frame_delay), 
                                         daemon=True).start()
-                folder_name = ""
+                        print("⏳ Generating transition frames...")
+                    else:
+                        print(f"❌ Folder '{folder_name}' not found!")
+                else:
+                    print("⚠️ Invalid folder name or no current frame")
             if waiting_for_transition and not transition_queue.empty():
+                print("🔄 Transition ready, switching modes...")
                 folder_first_tensor, folder_last_tensor, h, w, folder_audio_first, folder_audio_last, error = transition_queue.get()
                 if error:
-                    print(error)
+                    print(f"❌ Transition error: {error}")
                     current_folder_video = None
                     waiting_for_transition = False
                     transition_start_frame = None
@@ -236,6 +265,7 @@ while True:
                     current_mode = "folder"
                     waiting_for_transition = False
                     transition_start_frame = None
+                    print("✅ Successfully switched to folder mode")
                 break
             if current_mode != "root":
                 break
@@ -244,9 +274,11 @@ while True:
         if current_mode != "root":
             continue
 
+        print("🔄 Transitioning between root videos (2 -> 1)...")
         interpolate_frames(video2_last_tensor, video1_first_tensor, frames, original_height, original_width, transition_frame_delay, h1, w1, video2_audio_last, video1_audio_first)
 
     elif current_mode == "folder" and current_folder_video:
+        print(f"🎬 Playing folder video: {current_folder_video}")
         sa.stop_all()
         while not audio_queue.empty():
             audio_queue.get()
@@ -254,12 +286,13 @@ while True:
         transition_start_tensor, _, _ = preprocess_frame(downscale_frame(transition_start_frame or current_frame, target_height, target_width), target_height, target_width)
         
         transition_start_audio = process_audio(root_video_paths[0], -0.2, 0.2)
+        print("🔄 Transitioning to folder video...")
         interpolate_frames(transition_start_tensor, folder_transition_tensors[0], frames, original_height, original_width, transition_frame_delay, folder_transition_dims[0], folder_transition_dims[1], transition_start_audio, folder_transition_audio[0])
 
         cap = cv2.VideoCapture(current_folder_video)
         try:
-            audio_data, sr = librosa.load(current_folder_video, sr=sample_rate)
-            threading.Thread(target=play_audio, args=(audio_data, sr), daemon=True).start()
+            audio_data, audio_sr = librosa.load(current_folder_video, sr=sample_rate)
+            threading.Thread(target=play_audio, args=(audio_data, audio_sr), daemon=True).start()
         except Exception as e:
             print(f"Error loading audio for {current_folder_video}: {str(e)}")
         start_time = time.time()
@@ -268,16 +301,19 @@ while True:
             if not ret:
                 break
             display_frame = frame.copy()
-            cv2.putText(display_frame, "Playing folder video", (10, 30), 
+            cv2.putText(display_frame, "Đang phát video thư mục", (10, 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             cv2.imshow("Video Loop", display_frame)
             if cv2.waitKey(int(video_frame_delay)) & 0xFF == 27:
                 cap.release()
                 sa.stop_all()
+                stop_listening(wait_for_stop=False)
+                print("🛑 Stopping all audio and exiting...")
                 cv2.destroyAllWindows()
                 exit()
         cap.release()
 
+        print("🔄 Transitioning back to root video...")
         interpolate_frames(folder_transition_tensors[1], video1_first_tensor, frames, original_height, original_width, transition_frame_delay, folder_transition_dims[0], folder_transition_dims[1], folder_transition_audio[1], video1_audio_first)
 
         current_mode = "root"
@@ -285,3 +321,4 @@ while True:
         folder_transition_tensors = None
         folder_transition_dims = None
         folder_transition_audio = None
+        print("✅ Returned to root video mode")
