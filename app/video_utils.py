@@ -5,7 +5,7 @@ from torch.nn import functional as F
 
 target_fps = 60
 
-videos_base_dir = r"D:\Python\code\videos"
+videos_base_dir = r"..\code\videos"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_grad_enabled(False)

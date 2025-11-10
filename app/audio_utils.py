@@ -10,7 +10,7 @@ import os
 
 sample_rate = 44100
 
-VIDEO_DIR = r"D:\Python\code\videos"
+VIDEO_DIR = r"..\code\videos"
 folder_queue = queue.Queue() 
 
 
@@ -56,7 +56,6 @@ def play_audio(audio_data, sr=sample_rate):
 
 
 def speech_callback(recognizer, audio):
-    print("🔴 Processing audio... (detected speech)")
     try:
         # Thay đổi ngôn ngữ thành tiếng Việt
         query = recognizer.recognize_google(audio, language='vi-VN')
