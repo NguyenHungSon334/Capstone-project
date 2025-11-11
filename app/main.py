@@ -8,30 +8,61 @@ import warnings
 import threading
 import queue
 import librosa
-import simpleaudio as sa
+import pygame # SỬ DỤNG PYGAME
 import time
 import sys
 import speech_recognition as sr
 import google.generativeai as genai
+from PIL import Image, ImageDraw, ImageFont # Cần cho font
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.audio_utils import *
-from app.video_utils import *
-from app.interpolation import *
-from app.suggestion import *
+from audio_utils import *
+from video_utils import *
+from interpolation import *
+from suggestion import * # SỬ DỤNG suggestion.py
 
 warnings.filterwarnings("ignore")
 
 genai.configure(api_key="AIzaSyBT7G6EfLR45FLyoFVDC8ft2zbfhkx01Oo")
 
-VIDEO_DIR = r"..\code\videos"
+VIDEO_DIR = r"..\Capstone-project\videos"
+
+# --- Tải Font (Sẽ được truyền vào suggestion.py) ---
+FONT_NAME = "arial.ttf" 
+try:
+    font_path = os.path.join(os.path.dirname(__file__), FONT_NAME)
+    font_regular = ImageFont.truetype(font_path, 24)
+    font_small = ImageFont.truetype(font_path, 18) # Font nhỏ cho các mục hint
+    font_title = ImageFont.truetype(font_path, 20) # Font tiêu đề hint
+    font_button = ImageFont.truetype(font_path, 30) # Font cho nút 'G'
+    print(f"Da tai font: {font_path}")
+except IOError:
+    print(f"LỖI: Không tìm thấy font: {font_path}. Vui lòng tải 'arial.ttf' vào thư mục 'app'.")
+    font_regular = ImageFont.load_default()
+    font_small = ImageFont.load_default()
+    font_title = ImageFont.load_default()
+    font_button = ImageFont.load_default()
+# --- KẾT THÚC Tải Font ---
+
+# --- Thêm hàm vẽ PIL (cho main.py và suggestion.py) ---
+def draw_text_pil(img, text, position, font, color_bgr):
+    try:
+        color_rgb = (color_bgr[2], color_bgr[1], color_bgr[0]) # BGR to RGB
+        img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(img_pil)
+        draw.text(position, text, font=font, fill=color_rgb)
+        return cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR) # RGB to BGR
+    except Exception as e:
+        print(f"Loi ve van ban: {e}")
+        return img
+# --- Kết thúc hàm ---
 
 root_video_paths = [
-    r"..\code\videos\root\video1.mp4",
-    r"..\code\videos\root\video2.mp4"
+    r"..\Capstone-project\videos\root\video1.mp4",
+    r"..\Capstone-project\videos\root\video2.mp4"
 ]
-frames = 10
+frames = 5
 target_height = 720
 target_width = 1280
 target_fps = 60
@@ -81,8 +112,12 @@ recognizer.pause_threshold = 0.5
 
 mic = sr.Microphone()
 with mic as source:
+    print("Dang dieu chinh mic...")
     recognizer.adjust_for_ambient_noise(source, duration=1)
+    print("✅ Microphone calibrated for ambient noise")
+
 stop_listening = recognizer.listen_in_background(mic, speech_callback)
+print("🎤 Background listening started - speak Vietnamese anytime!")
 
 def get_current_mode():
     return current_mode
@@ -90,13 +125,21 @@ def get_current_mode():
 def get_waiting_for_transition():
     return waiting_for_transition
 
-suggestion_handler = SuggestionHandler(target_height, VIDEO_DIR, folder_queue, get_current_mode, get_waiting_for_transition)
-
+suggestion_handler = SuggestionHandler(
+    target_height, 
+    VIDEO_DIR, 
+    folder_queue, 
+    get_current_mode, 
+    get_waiting_for_transition,
+    font_title=font_title, 
+    font_item=font_small,   
+    font_button=font_button 
+)
 cv2.setMouseCallback("Video Loop", suggestion_handler.mouse_callback)
 
 while True:
     if current_mode == "root":
-        sa.stop_all()
+        pygame.mixer.stop() 
         while not audio_queue.empty():
             audio_queue.get()
         
@@ -107,14 +150,17 @@ while True:
             threading.Thread(target=play_audio, args=(audio_data, audio_sr), daemon=True).start()
         except Exception as e:
             print(f"Error loading audio for {current_root_path}: {str(e)}")
+        
         while cap.isOpened():
             if waiting_for_transition:
                 display_frame = transition_start_frame.copy()
-                cv2.putText(display_frame, "Đang chuẩn bị chuyển cảnh...", (10, 90), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                suggestion_handler.draw_circular_button(display_frame)
+                display_frame = draw_text_pil(display_frame, "Đang chuẩn bị chuyển cảnh...", (10, 90), 
+                                              font_regular, (255, 255, 255))
+                
+                display_frame = suggestion_handler.draw_circular_button(display_frame)
                 if suggestion_handler.show_suggestions:
-                    suggestion_handler.draw_suggestion_overlay(display_frame)
+                    display_frame = suggestion_handler.draw_suggestion_overlay(display_frame)
+                
                 cv2.imshow("Video Loop", display_frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == 27:
@@ -127,15 +173,15 @@ while True:
                         print(f"Transition error: {error}")
                         current_folder_video = None
                         waiting_for_transition = False
-                        transition_start_frame = None
+                        transition_start_frame = None # Dòng này OK
                     else:
                         folder_transition_tensors = (folder_first_tensor, folder_last_tensor)
                         folder_transition_dims = (h, w)
                         folder_transition_audio = (folder_audio_first, folder_audio_last)
                         current_mode = "folder"
                         waiting_for_transition = False
-                        transition_start_frame = None
-                        suggestion_handler.show_suggestions = False
+                        # transition_start_frame = None # <<< DÒNG NÀY LÀ LỖI, ĐÃ XÓA
+                        suggestion_handler.show_suggestions = False 
                     break
                 continue
 
@@ -144,37 +190,39 @@ while True:
                 break
             current_frame = frame
             display_frame = frame.copy()
-            cv2.putText(display_frame, "Nói tên thư mục", (10, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            display_frame = draw_text_pil(display_frame, "Nói tên thư mục (hoặc nhấn nút 'G')", (10, 30), 
+                                          font_regular, (255, 255, 255))
             
-            suggestion_handler.draw_circular_button(display_frame)
-            
+            display_frame = suggestion_handler.draw_circular_button(display_frame)
             if suggestion_handler.show_suggestions:
-                suggestion_handler.draw_suggestion_overlay(display_frame)
+                display_frame = suggestion_handler.draw_suggestion_overlay(display_frame)
             
             cv2.imshow("Video Loop", display_frame)
             key = cv2.waitKey(int(video_frame_delay)) & 0xFF
             if key == 27:
                 cap.release()
-                sa.stop_all()
+                pygame.mixer.stop() 
+                pygame.quit()
                 stop_listening(wait_for_stop=False)
                 cv2.destroyAllWindows()
                 sys.exit()
+
             if not folder_queue.empty() and not waiting_for_transition:
                 folder_name = folder_queue.get()
                 if folder_name and current_frame is not None:
                     current_folder_video = get_video_from_folder(folder_name)
                     if current_folder_video:
-                        sa.stop_all()
-                        transition_start_frame = current_frame.copy()
+                        pygame.mixer.stop() 
+                        transition_start_frame = current_frame.copy() # Lưu frame tại đây
                         waiting_for_transition = True
                         threading.Thread(target=generate_folder_transitions, 
-                                        args=(current_folder_video, transition_start_frame, video1_frames[0], frames, transition_queue, target_height, original_height, original_width, transition_frame_delay), 
+                                        args=(current_folder_video, transition_start_frame, video1_frames[0], frames, transition_queue, target_height, target_width, original_height, original_width, transition_frame_delay), 
                                         daemon=True).start()
                     else:
                         print(f"Folder '{folder_name}' not found!")
                 else:
                     print("Invalid folder name or no current frame")
+            
             if current_mode != "root":
                 break
         cap.release()
@@ -183,6 +231,13 @@ while True:
             continue
 
         next_index = (current_root_index + 1) % len(root_video_paths)
+        
+        last_frame_of_video = current_frame.copy() if (ret is False and current_frame is not None) else video1_frames[0].copy()
+        last_frame_of_video = draw_text_pil(last_frame_of_video, "Đang tạo chuyển cảnh AI (root)...", (10, 90), 
+                                            font_regular, (255, 255, 0))
+        cv2.imshow("Video Loop", last_frame_of_video)
+        cv2.waitKey(1) 
+
         if current_root_index == 0:
             interpolate_frames(video1_last_tensor, video2_first_tensor, frames, original_height, original_width, transition_frame_delay, h1, w1, video1_audio_last, video2_audio_first)
         else:
@@ -190,13 +245,21 @@ while True:
         current_root_index = next_index
 
     elif current_mode == "folder" and current_folder_video:
-        sa.stop_all()
+        pygame.mixer.stop() 
         while not audio_queue.empty():
             audio_queue.get()
         
-        transition_start_tensor, _, _ = preprocess_frame(downscale_frame(transition_start_frame or current_frame, target_height, target_width), target_height, target_width)
+        # SỬA LỖI VALUEERROR (đã sửa ở lần trước)
+        transition_start_tensor, _, _ = preprocess_frame(downscale_frame(transition_start_frame, target_height, target_width))
         
         transition_start_audio = process_audio(root_video_paths[current_root_index], -0.2, 0.2)
+        
+        display_message_frame = transition_start_frame.copy()
+        display_message_frame = draw_text_pil(display_message_frame, "Đang tạo chuyển cảnh AI...", (10, 90), 
+                                              font_regular, (255, 255, 0))
+        cv2.imshow("Video Loop", display_message_frame)
+        cv2.waitKey(1)
+
         interpolate_frames(transition_start_tensor, folder_transition_tensors[0], frames, original_height, original_width, transition_frame_delay, folder_transition_dims[0], folder_transition_dims[1], transition_start_audio, folder_transition_audio[0])
 
         cap = cv2.VideoCapture(current_folder_video)
@@ -205,25 +268,25 @@ while True:
             threading.Thread(target=play_audio, args=(audio_data, audio_sr), daemon=True).start()
         except Exception as e:
             print(f"Error loading audio for {current_folder_video}: {str(e)}")
+        
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
             display_frame = frame.copy()
-            cv2.putText(display_frame, "Đang phát video thư mục", (10, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            
-            if suggestion_handler.show_suggestions:
-                suggestion_handler.draw_suggestion_overlay(display_frame)
+            display_frame = draw_text_pil(display_frame, "Đang phát video thư mục (Nhấn ESC để về root)", (10, 30), 
+                                          font_regular, (255, 255, 255))
             
             cv2.imshow("Video Loop", display_frame)
             if cv2.waitKey(int(video_frame_delay)) & 0xFF == 27:
-                cap.release()
-                sa.stop_all()
-                stop_listening(wait_for_stop=False)
-                cv2.destroyAllWindows()
-                sys.exit()
+                break 
         cap.release()
+
+        last_frame_of_folder = frame.copy() if (ret is False and frame is not None) else video1_frames[0].copy()
+        last_frame_of_folder = draw_text_pil(last_frame_of_folder, "Đang tạo chuyển cảnh AI (về root)...", (10, 90), 
+                                             font_regular, (255, 255, 0))
+        cv2.imshow("Video Loop", last_frame_of_folder)
+        cv2.waitKey(1)
 
         interpolate_frames(folder_transition_tensors[1], video1_first_tensor, frames, original_height, original_width, transition_frame_delay, folder_transition_dims[0], folder_transition_dims[1], folder_transition_audio[1], video1_audio_first)
 

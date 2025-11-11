@@ -5,7 +5,7 @@ from torch.nn import functional as F
 
 target_fps = 60
 
-videos_base_dir = r"..\code\videos"
+videos_base_dir = r"..\Capstone-project\videos"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_grad_enabled(False)
@@ -75,9 +75,14 @@ def get_video_from_folder(folder_name):
     if not os.path.exists(folder_path):
         print(f"Folder not found: {folder_path}")
         return None
-    for file in os.listdir(folder_path):
-        if file.lower().endswith((".mp4", ".avi", ".mov")):
-            return os.path.join(folder_path, file)
+    try:
+        for file in os.listdir(folder_path):
+            if file.lower().endswith((".mp4", ".avi", ".mov")):
+                return os.path.join(folder_path, file)
+    except Exception as e:
+        print(f"Error reading folder {folder_path}: {e}")
+        return None
+        
     print(f"No valid video found in folder: {folder_path}")
     return None
 
