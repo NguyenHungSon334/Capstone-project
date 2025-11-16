@@ -1,71 +1,12 @@
 import cv2
 import numpy as np
-import os
-from PIL import Image, ImageDraw, ImageFont # THÊM IMPORT
+from PIL import Image, ImageDraw
+import json  # Thêm import json để đọc file
 
 # --- CẤU TRÚC HINT TƯƠNG TÁC MỚI ---
 # (Lấy từ main.py cũ của chúng ta)
-HINT_DATA = {
-    1: {
-        "name": "Giai đoạn 1: Bối cảnh và Hiệp định Giơnevơ (1954)",
-        "questions": [
-            ("Tình hình sau Hiệp định Giơnevơ 1954?", "Giơnevơ chia nước ở vĩ tuyến 17_ Bắc khôi phục, Nam do Diệm (Mỹ hậu thuẫn), nhiệm vụ_ giữ lực lượng và chuẩn bị thống nhất"),
-            ("Mục tiêu pháp lý của Hiệp định Giơnevơ là gì?", "mục tiêu pháp lý giơnevo"),
-            ("Sự kiện ngày 20-21 tháng 7 năm 1954 là gì?", "Ngày 20–21 tháng 7 năm 1954 – một mốc lịch sử quan trọng đã thay đổi cục diện Đông Dương"),
-            ("Sau Hiệp định Giơnevơ 1954, quân đội hai bên làm gì?", "Sau Hiệp định Giơnevơ năm 1954, quân đội hai bên thực hiện điều gì"),
-            ("Sau Hiệp định Giơnevơ, miền Bắc đã làm gì?", "Sau Hiệp định Giơnevơ, lực lượng cách mạng ở miền Bắc đã làm gì để chuẩn bị cho nhiệm vụ lâu dài"),
-            ("Sau Hiệp định Giơnevơ, thời cơ nào để tổ chức tổng tuyển cử?", "Sau Hiệp định Giơnevơ, thời cơ nào đã tạo điều kiện cho Việt Nam tổ chức tổng tuyển cử thống nhất đất nước"),
-            ("Ý nghĩa của vĩ tuyến 17 theo Hiệp định Giơnevơ?", "Theo Hiệp định Giơnevơ, việc lấy vĩ tuyến 17 làm ranh giới quân sự tạm thời có ý nghĩa gì"),
-            ("Ý nghĩa của chiến thắng Điện Biên Phủ là gì?", "ý nghĩa sau chiến thắng điện biên phủ")
-        ]
-    },
-    2: {
-        "name": "Giai đoạn 2: Thời kỳ đầu chia cắt (1954 - 1960)",
-        "questions": [
-            ("Tình hình 2 miền Nam-Bắc sau khi Diệm hủy tổng tuyển cử?", "Diệm hủy tổng tuyển cử, siết cai trị với Mỹ hậu thuẫn_ miền Nam bắt bớ khiến cách mạng vào bí mật, còn miền Bắc xây kinh tế–quốc phòng làm chỗ dựa"),
-            ("Miền Bắc đã làm gì sau cải cách ruộng đất?", "Miền Bắc hoàn tất cải cách ruộng đất, kinh tế phục hồi thành chỗ dựa_ miền Nam giữ hạt nhân bí mật, manh nha tự vệ vũ trang—thế Bắc hậu phương, Nam chiến trường ngày càng rõ"),
-            ("Miền Bắc đã chi viện cho miền Nam như thế nào?", "Miền Bắc tăng tốc xây dựng để chi viện_ miền Nam củng cố cơ sở, nhen nhóm tự vệ dù bị truy quét_ toàn dân chuẩn bị cho chuyển thế lớn"),
-            ("Nghị quyết 15 (NQ15) và việc mở đường Trường Sơn?", "NQ15 xác định bạo lực cách mạng ở miền Nam_ Sài Gòn ban Luật 10-59 đàn áp cực độ_ Đoàn 559 mở tuyến Trường Sơn chi viện_ Nam Bộ nổi dậy—bước ngoặt từ giữ lực lượng sang thế tiến công"),
-            ("Chuyện gì xảy ra với cuộc tổng tuyển cử?", "Tổng tuyển cử theo Giơnevơ bị phá_ miền Nam siết kiểm soát, mở nhà giam, còn miền Bắc chỉnh đốn tổ chức, sản xuất và sẵn sàng chi viện người–vũ khí cho miền Nam"),
-            ("Kể về phong trào Đồng Khởi ở Bến Tre.", "Đồng Khởi bùng nổ từ Bến Tre lan khắp Nam Bộ–Tây Nguyên, phá thế kìm kẹp nông thôn, dẫn tới ra đời Mặt trận Dân tộc Giải phóng miền Nam (20-12-1960), nhân dân giành quyền làm chủ ở nhiều vùng rộng lớn")
-        ]
-    },
-    3: {
-        "name": "Giai đoạn 3: Chiến tranh Đặc biệt (1961 - 1964)",
-        "questions": [
-            ("MACV là gì và vai trò của nó ra sao?", "Mỹ lập MACV, tăng trực thăng vận và cơ giới hóa, nhưng gặp kháng cự rộng khắp_ phong trào phá ấp lan nhanh làm rỗng chương trình, lực lượng giải phóng trưởng thành mạnh"),
-            ("'Chiến tranh đặc biệt' của Mỹ-Diệm là gì?", "Mỹ–Diệm mở “Chiến tranh đặc biệt” (cố vấn, trực thăng, ấp chiến lược) nhưng ta bám dân phá ấp, phát triển du kích, mở rộng vùng giải phóng, khiến Sài Gòn khó kiểm soát và cán cân không nghiêng về phía Mỹ như kỳ vọng"),
-            ("Sự kiện Vịnh Bắc Bộ là gì?", "Sài Gòn bất ổn vì đảo chính_ sự kiện Vịnh Bắc Bộ cho Mỹ cái cớ mở rộng chiến tranh, “đặc biệt” coi như thất bại, Washington chuẩn bị đổ quân và ném bom miền Bắc—cục diện bước sang giai đoạn khốc liệt hơn"),
-            ("Kể về trận Ấp Bắc và khủng hoảng Phật giáo 1963.", "Thắng lợi Ấp Bắc cùng khủng hoảng Phật giáo làm Sài Gòn rúng động, Diệm–Nhu bị lật đổ (11-1963), “chiến tranh đặc biệt” bế tắc và Mỹ đứng trước ngã rẽ _leo thang_")
-        ]
-    },
-    4: {
-        "name": "Giai đoạn 4: Chiến tranh Cục bộ (1965 - 1968)",
-        "questions": [
-            ("Chiến dịch Mùa khô lần 2 (Junction City) diễn ra sao?", "Mùa khô lần 2 (có Junction City) khiến thương vong Mỹ tăng và phản chiến nhen nhóm, ta vừa tiêu diệt sinh lực vừa giữ lực lượng mở bàn đạp, trong khi Sài Gòn loay hoay bầu cử"),
-            ("Kể về sự kiện Mậu Thân 1968.", "Mậu Thân 1968_ ta đồng loạt đánh vào hầu hết đô thị, Khe Sanh hút quân Mỹ_ cú sốc chính trị–tâm lý buộc Johnson ngừng ném bom hạn chế, không tái tranh cử và mở đàm phán Paris"),
-            ("Mỹ bắt đầu 'chiến tranh cục bộ' và Rolling Thunder như thế nào?", "Mỹ đổ bộ Đà Nẵng mở “chiến tranh cục bộ” và ném bom miền Bắc (Rolling Thunder)_ ta thắng Vạn Tường bẻ “tìm diệt”, miền Bắc vừa sản xuất vừa chiến đấu vẫn chi viện, chiến tranh bước vào giai đoạn ác liệt"),
-            ("Chiến dịch mùa khô lần thứ nhất diễn ra như thế nào?", "Mỹ–ngụy mở _mùa khô lần 1_ với hỏa lực lớn nhưng ta đánh bại nhiều cuộc càn, giữ vững vùng và chủ lực_ “tìm diệt” thất bại, miền Bắc duy trì giao thông–sản xuất–chiến đấu nhịp nhàng, và Mỹ bắt đầu sa lầy")
-        ]
-    },
-    5: {
-        "name": "Giai đoạn 5: Việt Nam hóa Chiến tranh (1969 - 1973)",
-        "questions": [
-            ("Nội dung của Hiệp định Paris 1973 là gì?", "Hiệp định Paris (27-1-1973)_ Mỹ rút quân, trao trả tù binh_ ta củng cố lực lượng, mở rộng vùng giải phóng, miền Bắc tăng sản xuất–chi viện, trong khi Sài Gòn phá hoại nhưng yếu thế"),
-            ("Chiến dịch Lam Sơn 719 diễn ra như thế nào?", "Lam Sơn 719_ quân Sài Gòn (có Mỹ yểm trợ) đánh sang Nam Lào nhằm cắt Trường Sơn nhưng bị ta đánh bại nặng, lộ rõ điểm yếu, tuyến chi viện vẫn an toàn, ta giữ thế chủ động và củng cố niềm tin tất thắng"),
-            ("Tại sao Mỹ và Sài Gòn đánh sang Campuchia?", "Mỹ–Sài Gòn đánh sang Campuchia để cắt chi viện, nhưng ta phối hợp ba nước Đông Dương nối liền hành lang–hậu cứ, mở rộng vùng giải phóng_ miền Bắc tăng sản xuất–chi viện, bộc lộ rõ bất cập của “Việt Nam hoá”"),
-            ("Kể về Mùa hè đỏ lửa 1972 (Tiến công Trị-Thiên, Tây Nguyên).", "Năm 1972, ta tiến công lớn ở Trị–Thiên, Tây Nguyên, Đông Nam Bộ_ Mỹ đáp trả bằng Linebacker và B-52 “Điện Biên Phủ trên không” nhưng Hà Nội–Hải Phòng đứng vững, buộc Mỹ nhượng bộ và mở đường ký Hiệp định Paris"),
-            ("'Việt Nam hóa chiến tranh' của Nixon là gì?", "Nixon thực hiện “Việt Nam hoá”_ rút dần quân Mỹ, giao gánh nặng cho quân Sài Gòn_ ta vừa tiến công vừa đấu tranh ngoại giao_ Bác Hồ qua đời, phong trào phản chiến Mỹ lan rộng—thế chiến lược nghiêng về phía ta")
-        ]
-    },
-    6: {
-        "name": "Giai đoạn 6: Hướng tới Thống nhất (1973 - 1975)",
-        "questions": [
-            ("Kể về sự kiện 30 tháng 4 năm 1975.", "Ta thắng Buôn Ma Thuột, Huế–Đà Nẵng sụp_ Hồ Chí Minh toàn thắng, 30-4-1975 Dương Văn Minh đầu hàng_ miền Nam giải phóng, thống nhất"),
-            ("Tình hình Sài Gòn trước 1975 như thế nào?", "Ta thử lửa chiến dịch vừa, rạn phòng ngự địch_ Sài Gòn khủng hoảng_ Bộ Chính trị chốt phương án tổng tiến công")
-        ]
-    }
-}
+with open('./hint.json', 'r', encoding='utf-8') as f:
+    HINT_DATA = json.load(f)
 # --- KẾT THÚC CẤU TRÚC HINT ---
 
 # --- HÀM HELPER VẼ CHỮ ---
@@ -78,6 +19,7 @@ def draw_text_pil_suggestion(img, text, position, font, color_bgr):
         return cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR) # RGB to BGR
     except Exception as e:
         print(f"Loi ve van ban (Suggestion): {e}")
+    
         return img
 
 # --- HÀM NGẮT DÒNG (FIX LỖI TRÀN CHỮ) ---
@@ -99,9 +41,11 @@ def wrap_text(text, font, max_width):
     return lines
 
 class SuggestionHandler:
-    def __init__(self, target_height, video_dir, folder_queue, get_current_mode_func, get_waiting_for_transition_func, 
-                 font_title, font_item, font_button):
+    def __init__(self, target_height, target_width, video_dir, folder_queue, get_current_mode_func, get_waiting_for_transition_func, 
+                 font_title, font_item, font_button, font_regular):
         self.show_suggestions = False
+        self.show_input_box = False  # Flag cho input overlay
+        self.input_text = ""  # Text đang nhập
         self.selected_index = -1
         self.menu_x = 90
         self.menu_y = 150 # Nâng menu lên cao hơn một chút
@@ -109,12 +53,15 @@ class SuggestionHandler:
         self.menu_height = 450 # Tăng chiều cao
         self.item_height = 30
         self.scroll_offset = 0
-        self.button_center = (50, target_height - 50)
+        self.button_center_suggest = (50, target_height - 50)  # Nút 'G' cho suggestions
+        self.button_center_input = (target_width - 50, target_height - 50)  # Nút 'T' cho input
         self.button_radius = 30
         self.video_dir = video_dir
         self.folder_queue = folder_queue
         self.get_current_mode = get_current_mode_func
         self.get_waiting_for_transition = get_waiting_for_transition_func
+        self.target_height = target_height
+        self.target_width = target_width
         
         # --- LOGIC MENU MỚI ---
         self.current_menu_level = "main" # 'main' hoặc số (1-6)
@@ -126,7 +73,16 @@ class SuggestionHandler:
         self.font_title = font_title
         self.font_item = font_item
         self.font_button = font_button
+        self.font_input = font_regular  # Font cho input text, dùng font_regular từ main
         # --- KẾT THÚC LƯU TRỮ FONT ---
+
+    def is_over_suggest_button(self, x, y):
+        dist = np.sqrt((x - self.button_center_suggest[0])**2 + (y - self.button_center_suggest[1])**2)
+        return dist <= self.button_radius
+
+    def is_over_input_button(self, x, y):
+        dist = np.sqrt((x - self.button_center_input[0])**2 + (y - self.button_center_input[1])**2)
+        return dist <= self.button_radius
 
     def mouse_callback(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -152,7 +108,6 @@ class SuggestionHandler:
                         else:
                             # Click vào câu hỏi -> Gửi lệnh
                             folder_name = data # data là tên thư mục
-                            print(f"📁 Selected suggestion: '{folder_name}'")
                             self.folder_queue.put(folder_name)
                             self.show_suggestions = False
                             self.current_menu_level = "main" # Reset
@@ -166,15 +121,19 @@ class SuggestionHandler:
                 # --- KẾT THÚC LOGIC CLICK ---
             
             else:
-                # Check circular button click
+                # Check circular buttons click
                 if self.get_current_mode() != "root":
                     return
-                dist = np.sqrt((x - self.button_center[0])**2 + (y - self.button_center[1])**2)
-                if dist <= self.button_radius and not self.get_waiting_for_transition():
-                    print("🖱️ Suggestion button clicked! Showing overlay...")
-                    self.show_suggestions = True
+                if self.is_over_suggest_button(x, y) and not self.get_waiting_for_transition():
+                    self.show_suggestions = not self.show_suggestions  # Toggle suggestions
+                    self.show_input_box = False  # Tắt input nếu đang mở
+                    self.input_text = ""
                     self.current_menu_level = "main"
                     self.scroll_offset = 0
+                elif self.is_over_input_button(x, y) and not self.get_waiting_for_transition():
+                    self.show_input_box = not self.show_input_box  # Toggle input box
+                    self.show_suggestions = False  # Tắt suggestions nếu đang mở
+                    self.input_text = ""  # Reset text
 
         elif event == cv2.EVENT_MOUSEWHEEL:
             if self.show_suggestions and self.menu_x <= x <= self.menu_x + self.menu_width and self.menu_y <= y <= self.menu_y + self.menu_height:
@@ -298,15 +257,54 @@ class SuggestionHandler:
         
         return frame
 
-    def draw_circular_button(self, frame):
-        # Draw white circle
-        cv2.circle(frame, self.button_center, self.button_radius, (255, 255, 255), -1)  # Filled white
-        # Draw border
-        cv2.circle(frame, self.button_center, self.button_radius, (0, 0, 0), 2)  # Black border
+    def draw_input_overlay(self, frame):
+        # Vị trí giữa dưới khung hình
+        input_width = 600
+        input_height = 100
+        input_x = (self.target_width - input_width) // 2  # Giữa ngang
+        input_y = self.target_height - input_height - 50  # Dưới cùng, cách đáy 50 pixel
         
-        text_pos_x = self.button_center[0] - 12
-        text_pos_y = self.button_center[1] - 15
+        # Vẽ nền
+        frame = self.draw_filled_rounded_rect(frame, (input_x, input_y), (input_x + input_width, input_y + input_height), (255, 255, 255), 20)
+        # Vẽ viền
+        self.draw_rounded_rect(frame, (input_x, input_y), (input_x + input_width, input_y + input_height), (0, 0, 0), 2, 20)
+        
+        # Vẽ tiêu đề
+        frame = draw_text_pil_suggestion(frame, "Nhập tên thư mục (Enter để gửi, ESC để hủy):", (input_x + 10, input_y + 10), self.font_title, (0, 0, 0))
+        
+        # Vẽ hộp text
+        text_box_y = input_y + 50
+        cv2.rectangle(frame, (input_x + 10, text_box_y), (input_x + input_width - 10, text_box_y + 40), (200, 200, 200), -1)  # Nền xám
+        cv2.rectangle(frame, (input_x + 10, text_box_y), (input_x + input_width - 10, text_box_y + 40), (0, 0, 0), 2)  # Viền đen
+        
+        # Vẽ text đang nhập (hỗ trợ ngắt dòng nếu dài)
+        wrapped_lines = wrap_text(self.input_text, self.font_input, input_width - 40)
+        y_pos = text_box_y + 5
+        for line in wrapped_lines:
+            frame = draw_text_pil_suggestion(frame, line, (input_x + 20, y_pos), self.font_input, (0, 0, 0))
+            y_pos += 30  # Khoảng cách dòng
+        
+        # Thêm cursor blinking (giả, chỉ vẽ '|')
+        cursor_x = input_x + 20 + self.font_input.getlength(self.input_text)
+        frame = draw_text_pil_suggestion(frame, "|", (cursor_x, text_box_y + 5), self.font_input, (0, 0, 0))
+        
+        return frame
+
+    def draw_circular_buttons(self, frame):
+        # Vẽ nút 'G' cho suggestions (giữ nguyên)
+        cv2.circle(frame, self.button_center_suggest, self.button_radius, (255, 255, 255), -1)  # Filled white
+        cv2.circle(frame, self.button_center_suggest, self.button_radius, (0, 0, 0), 2)  # Black border
+        text_pos_x = self.button_center_suggest[0] - 12
+        text_pos_y = self.button_center_suggest[1] - 15
         frame = draw_text_pil_suggestion(frame, "G", (text_pos_x, text_pos_y), 
+                                         self.font_button, (0, 0, 0))
+        
+        # Vẽ nút 'T' cho input
+        cv2.circle(frame, self.button_center_input, self.button_radius, (255, 255, 255), -1)  # Filled white
+        cv2.circle(frame, self.button_center_input, self.button_radius, (0, 0, 0), 2)  # Black border
+        text_pos_x = self.button_center_input[0] - 12
+        text_pos_y = self.button_center_input[1] - 15
+        frame = draw_text_pil_suggestion(frame, "T", (text_pos_x, text_pos_y), 
                                          self.font_button, (0, 0, 0))
         
         return frame

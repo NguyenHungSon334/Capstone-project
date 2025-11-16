@@ -5,7 +5,7 @@ from torch.nn import functional as F
 
 target_fps = 60
 
-videos_base_dir = r"..\Capstone-project\videos"
+videos_base_dir = r".\videos"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_grad_enabled(False)
@@ -22,9 +22,7 @@ def get_video_frames(video_path, target_height=720, target_width=1280):
         raise ValueError(f"Cannot open video: {video_path}")
     
     fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps != target_fps:
-        print(f"Warning: {video_path} has FPS {fps}, expected {target_fps}. Using {target_fps} FPS.")
-    
+
     frames = []
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     

@@ -1,13 +1,11 @@
 import os
 import cv2
+import sys
 import torch
 import numpy as np
 from torch.nn import functional as F
 from torch.cuda.amp import autocast
-import warnings
 import threading
-import queue
-import librosa
 import pygame # SỬ DỤNG PYGAME
 import time
 import math
@@ -23,7 +21,7 @@ modelDir = r"rife_1\train_log"
 from rife_1.train_log.RIFE_HDv3 import Model
 model = Model()
 model.load_model(modelDir, -1)
-print("Loaded v3.x HD model.")
+# print("Loaded v3.x HD model.")
 model.eval()
 model.device()
 
@@ -115,7 +113,7 @@ def interpolate_frames(tensor0, tensor1, frames, original_height, original_width
     
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"Transition processing time (AI): {processing_time:.2f} seconds")
+    # print(f"Transition processing time (AI): {processing_time:.2f} seconds")
 
 def generate_folder_transitions(folder_video_path, current_frame, video1_first_frame, frames, result_queue, target_height, target_width, original_height, original_width, transition_frame_delay):
     try:

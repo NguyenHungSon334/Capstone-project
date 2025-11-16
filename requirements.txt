@@ -1,0 +1,8 @@
+opencv-python==4.10.0.84  # Cho cv2 (OpenCV) xử lý video và hiển thị
+torch==2.4.1              # Cho PyTorch (torch, functional, autocast) dùng model AI RIFE
+numpy==2.1.2              # Cho xử lý mảng (np)
+librosa==0.10.2           # Cho xử lý audio (load, sample rate)
+pygame==2.6.1             # Cho phát âm thanh (mixer, sound)
+speechrecognition==3.10.4 # Cho speech recognition (sr)
+google-generativeai==0.8.3 # Cho Google Generative AI (genai, Gemini API)
+pillow==11.1.1            # Cho PIL (Image, ImageDraw, ImageFont) vẽ text
